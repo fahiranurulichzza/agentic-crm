@@ -1,89 +1,125 @@
 from crewai import Agent, Task, Crew, Process
 from typing import List
+from crewai_tools import FileReadTool, CSVSearchTool
 from modules.utils import *
+from modules.tools import *
+
 
 class SalesAnalystAgent:
     def __init__(self):
-        self.data = load_data()
         self.llm = load_llm()
-        
+        self.output_dir = "output"
+        self.sql_tools = [tables_schema, execute_sql]
+
     def create_agents(self) -> List[Agent]:
-        # Data Analyst Agent
         data_analyst = Agent(
             role='Data Analyst',
-            goal='Analyze sales data and provide insights',
-            backstory="""You are an expert data analyst with years of experience in sales analysis.
-            You excel at finding patterns and trends in sales data.""",
+            goal='Analyze sales data to answer: {question}',
+            backstory="""You are an expert data analyst with extensive experience in sales analysis.
+            You excel at identifying patterns, trends, and key metrics in sales data.
+            Use the `tables_schema` to understand the metadata for the tables.
+            Use the `execute_sql` to execute queries.""",
             verbose=True,
-            allow_delegation=True,
-            llm=self.llm
+            allow_delegation=False,
+            llm=self.llm,
+            tools=self.sql_tools,
+            cache=True
         )
-        
-        # Sales Strategist Agent
+
         sales_strategist = Agent(
             role='Sales Strategist',
-            goal='Provide strategic recommendations based on sales analysis',
-            backstory="""You are a seasoned sales strategist who can turn data insights into
-            actionable business recommendations.""",
+            goal='Develop strategic recommendations based on sales analysis for: {question}',
+            backstory="""You are a seasoned sales strategist skilled at translating data insights
+            into actionable business strategies, considering market conditions and objectives.""",
             verbose=True,
             allow_delegation=True,
-            llm=self.llm
+            llm=self.llm,
+            cache=True
         )
-        
-        # CRM Specialist Agent
+
         crm_specialist = Agent(
             role='CRM Specialist',
-            goal='Analyze customer behavior and provide CRM insights',
-            backstory="""You are a CRM expert who understands customer behavior patterns
-            and can provide valuable insights for customer relationship management.""",
+            goal='Provide CRM insights for: {question}',
+            backstory="""You are a CRM expert specializing in customer behavior analysis,
+            segmentation, and relationship management strategies.""",
             verbose=True,
             allow_delegation=True,
-            llm=self.llm
+            llm=self.llm,
+            cache=True
         )
-        
+
         return [data_analyst, sales_strategist, crm_specialist]
-    
+
     def create_tasks(self, agents: List[Agent]) -> List[Task]:
         data_analyst, sales_strategist, crm_specialist = agents
-        
+
         # Task 1: Data Analysis
         analysis_task = Task(
-            description="""Analyze the sales data and provide insights related to: {question}
-            Focus on key metrics, trends, and patterns in the data.""",
+            description="""Analyze the sales data from the 'superstore' table to answer: {question}.
+            Focus on key metrics (e.g., sales, profit, quantity), trends, and patterns.
+            Use SQL queries to extract relevant data and provide a comprehensive analysis. 
+            Remember, all tools expect a simple string as input""",
             agent=data_analyst,
-            expected_output="A detailed analysis of sales data with key metrics, trends, and patterns. Formatted as markdown",
-            output_file="output/analysis_report.md"
+            expected_output="""A detailed markdown report containing:
+            - Key metrics (sales, profit, etc.)
+            - Identified trends and patterns
+            - Supporting data points from SQL queries
+            - Clear explanations of findings""",
+            async_execution=False,
+            output_file=f"{self.output_dir}/analysis_report.md"
         )
-        
+
         # Task 2: Strategy Development
         strategy_task = Task(
-            description="""Based on the data analysis, develop strategic recommendations for: {question}
-            Consider market conditions, competition, and business objectives.""",
+            description="""Based on the data analysis for {question}, develop strategic recommendations.
+            Consider:
+            - Market conditions and competitive landscape
+            - Business objectives (growth, profitability, market share)
+            - Practical implementation steps""",
             agent=sales_strategist,
-            expected_output="Strategic recommendations and action plans based on the data analysis. Formatted as markdown",
-            output_file="output/strategy_report.md"
+            expected_output="""A markdown report containing:
+            - Strategic recommendations
+            - Actionable implementation plans
+            - Expected business impact
+            - Alignment with analysis findings""",
+            output_file=f"{self.output_dir}/strategy_report.md",
+            async_execution=False,
+            context=[analysis_task]
         )
-        
+
         # Task 3: CRM Insights
         crm_task = Task(
-            description="""Provide CRM-specific insights and recommendations for: {question}
-            Focus on customer behavior, segmentation, and relationship management strategies.""",
+            description="""Provide CRM-specific insights for {question} based on sales data.
+            Focus on:
+            - Customer behavior patterns
+            - Segmentation opportunities
+            - Relationship management strategies
+            Use relevant data points from the analysis.""",
             agent=crm_specialist,
-            expected_output="CRM insights and customer-focused recommendations. Formatted as markdown",
-            output_file="output/crm_report.md"
+            expected_output="""A markdown report containing:
+            - Customer behavior insights
+            - Segmentation recommendations
+            - CRM strategies for customer retention
+            - Supporting data points""",
+            output_file=f"{self.output_dir}/crm_report.md",
+            async_execution=False,
+            context=[analysis_task]
         )
-        
+
         return [analysis_task, strategy_task, crm_task]
-    
+
     def create_crew(self):
         agents = self.create_agents()
         tasks = self.create_tasks(agents)
-        
+
         crew = Crew(
             agents=agents,
             tasks=tasks,
             verbose=True,
-            process=Process.sequential
+            process=Process.sequential,
+            cache=True,
+            max_rpm=100,
+            share_crew=False
         )
-        
+
         return crew
