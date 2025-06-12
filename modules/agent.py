@@ -20,7 +20,7 @@ class SalesAnalystAgent:
             Use the `tables_schema` to understand the metadata for the tables.
             Use the `execute_sql` to execute queries.""",
             verbose=True,
-            allow_delegation=False,
+            allow_delegation=True,
             llm=self.llm,
             tools=self.sql_tools,
             cache=True
